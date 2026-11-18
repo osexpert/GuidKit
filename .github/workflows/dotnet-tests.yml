@@ -23,10 +23,10 @@ jobs:
         dotnet-version: '8.0.x'
 
     - name: Restore
-      run: dotnet restore GuidPhantom.Tests/GuidPhantom.Tests.csproj
+      run: dotnet restore GuidKit.Tests/GuidKit.Tests.csproj
 
     - name: Build (net8 only)
-      run: dotnet build GuidPhantom.Tests/GuidPhantom.Tests.csproj --framework net8.0 --configuration Release --no-restore
+      run: dotnet build GuidKit.Tests/GuidKit.Tests.csproj --framework net8.0 --configuration Release --no-restore
 
     - name: Test (net8 only)
-      run: dotnet test GuidPhantom.Tests/GuidPhantom.Tests.csproj --framework net8.0 --configuration Release --no-build
+      run: dotnet test GuidKit.Tests/GuidKit.Tests.csproj --framework net8.0 --configuration Release --no-build
