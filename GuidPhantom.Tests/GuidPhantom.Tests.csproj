@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\GuidPhantom\GuidPhantom.csproj" />
+    <ProjectReference Include="..\GuidKit\GuidKit.csproj" />
   </ItemGroup>
 
 

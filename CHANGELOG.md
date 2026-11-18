@@ -1,3 +1,6 @@
+## 0.0.9
+* Rename to GuidKit
+
 ## 0.0.8
 * Fix crash in CreateVersion1() on Linux (uuid_generate_time_safe incorrect marshal)
 

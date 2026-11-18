@@ -1,4 +1,4 @@
 REM set myKey=
-set ver=0.0.8
+set ver=0.0.9
 
-nuget push bin\Packages\Release\NuGet\GuidPhantom.%ver%.nupkg -src https://api.nuget.org/v3/index.json -ApiKey %myKey%
+nuget push bin\Packages\Release\NuGet\GuidKit.%ver%.nupkg -src https://api.nuget.org/v3/index.json -ApiKey %myKey%
