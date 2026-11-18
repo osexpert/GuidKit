@@ -100,8 +100,8 @@ namespace GuidPhantom.Tests
 			Assert.AreEqual(1, inf1.Version);
 			Assert.AreEqual(GuidVariant.IETF, inf1.Variant);
 			// should be pretty close, but strangely it is often over 1 seconds
-			var diff = (DateTimeOffset.UtcNow - inf1.Time);
-			Assert.IsTrue(diff.TotalSeconds < 10, diff.ToString());
+			var diff = (DateTimeOffset.Now - inf1.Time);
+			Assert.IsTrue(diff.TotalSeconds < 2, diff.ToString());
 
 			Assert.AreEqual(v1, v1.ConvertVersion1To6().ConvertVersion6To1());
 
@@ -130,8 +130,8 @@ namespace GuidPhantom.Tests
 			Assert.AreEqual(6, inf6.Version);
 			Assert.AreEqual(GuidVariant.IETF, inf6.Variant);
 			// should be pretty close, but strangely it is often over 1 seconds
-			var diff = (DateTimeOffset.UtcNow - inf6.Time);
-			Assert.IsTrue(diff.TotalSeconds < 10, diff.ToString());
+			var diff = (DateTimeOffset.Now - inf6.Time);
+			Assert.IsTrue(diff.TotalSeconds < 2, diff.ToString());
 
 			Assert.AreEqual(v6, v6.ConvertVersion6To1().ConvertVersion1To6());
 
