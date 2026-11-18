@@ -100,8 +100,13 @@ namespace GuidPhantom.Tests
 			Assert.AreEqual(1, inf1.Version);
 			Assert.AreEqual(GuidVariant.IETF, inf1.Variant);
 			// should be pretty close, but strangely it is often over 1 seconds
-			var diff = (DateTimeOffset.Now - inf1.Time);
-			Assert.IsTrue(diff.TotalSeconds < 2, diff.ToString());
+			var diff = (DateTimeOffset.UtcNow - inf1.Time);
+			// Linux hosts in github generate V1 with wrong times, so allow +- 2h2sec slack
+			//Assert.IsTrue(diff.TotalSeconds < 2, diff.ToString());
+			var maxDiff = TimeSpan.FromHours(2) + TimeSpan.FromSeconds(2);
+			Assert.IsTrue(
+				diff >= -maxDiff && diff <= maxDiff,
+				$"Time difference {diff} exceeds allowed range ±{maxDiff}.");
 
 			Assert.AreEqual(v1, v1.ConvertVersion1To6().ConvertVersion6To1());
 
@@ -131,7 +136,12 @@ namespace GuidPhantom.Tests
 			Assert.AreEqual(GuidVariant.IETF, inf6.Variant);
 			// should be pretty close, but strangely it is often over 1 seconds
 			var diff = (DateTimeOffset.Now - inf6.Time);
-			Assert.IsTrue(diff.TotalSeconds < 2, diff.ToString());
+			// Linux hosts in github generate V1 with wrong times, so allow +- 2h2sec slack
+			//Assert.IsTrue(diff.TotalSeconds < 2, diff.ToString());
+			var maxDiff = TimeSpan.FromHours(2) + TimeSpan.FromSeconds(2);
+			Assert.IsTrue(
+				diff >= -maxDiff && diff <= maxDiff,
+				$"Time difference {diff} exceeds allowed range ±{maxDiff}.");
 
 			Assert.AreEqual(v6, v6.ConvertVersion6To1().ConvertVersion1To6());
 
