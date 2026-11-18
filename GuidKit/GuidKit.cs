@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 
-[assembly: InternalsVisibleTo("GuidPhantom.Tests")]
+[assembly: InternalsVisibleTo("GuidKit.Tests")]
 //[assembly: InternalsVisibleTo("ConsoleApp1")]
 
 namespace GuidPhantom

@@ -34,7 +34,7 @@ GO
 
 -- uuid v7: time + counter + random
 -- Not ordered in ms sql server if stored as uniqueidentifier.
--- Based on https://github.com/osexpert/GuidPhantom/blob/main/GuidPhantom/GuidKit.cs
+-- Based on https://github.com/osexpert/GuidKit/blob/main/GuidKit/GuidKit.cs
 -- Returns big endian array
 CREATE FUNCTION uuid_v7_array()
 RETURNS binary(16)
@@ -136,7 +136,7 @@ GO
 
 -- Like uuid v7, but swap rand and time to make it ordered in ms sql server when stored as uniqueidentifier.
 -- Based on https://github.com/mareek/UUIDNext/blob/main/Src/UUIDNext/Generator/UuidV8SqlServerGenerator.cs
--- Based on https://github.com/osexpert/GuidPhantom/blob/main/GuidPhantom/GuidKit.cs
+-- Based on https://github.com/osexpert/GuidKit/blob/main/GuidKit/GuidKit.cs
 -- Returns big endian array
 CREATE FUNCTION uuid_v8mssql_array()
 RETURNS binary(16)
@@ -234,7 +234,7 @@ END
 GO
 
 -- Create uuid v7 from v8 ms sql server.
--- Based on https://github.com/osexpert/GuidPhantom/blob/main/GuidPhantom/GuidKit.cs
+-- Based on https://github.com/osexpert/GuidKit/blob/main/GuidKit/GuidKit.cs
 CREATE FUNCTION uuid_v7_from_v8mssql(@uuid_in uniqueidentifier)
 RETURNS uniqueidentifier
 WITH EXECUTE AS CALLER
@@ -269,7 +269,7 @@ END
 GO
 
 -- Create uuid v8 ms sql server from uuid v7.
--- Based on https://github.com/osexpert/GuidPhantom/blob/main/GuidPhantom/GuidKit.cs
+-- Based on https://github.com/osexpert/GuidKit/blob/main/GuidKit/GuidKit.cs
 CREATE FUNCTION uuid_v8mssql_from_v7(@uuid_in uniqueidentifier)
 RETURNS uniqueidentifier
 WITH EXECUTE AS CALLER
@@ -307,7 +307,7 @@ GO
 -- roundtrip
 select case when dbo.uuid_v7_from_v8mssql(dbo.uuid_v8mssql_from_v7('017F22E2-79B0-7CC3-98C4-DC0C0C07398F')) = '017F22E2-79B0-7CC3-98C4-DC0C0C07398F' then 'pass' else 'fail' end
 select case when dbo.uuid_v8mssql_from_v7(dbo.uuid_v7_from_v8mssql('dc0c0c07-398f-848c-b30d-017f22e279b0')) = 'dc0c0c07-398f-848c-b30d-017f22e279b0' then 'pass' else 'fail' end
--- defacto snapshot from GuidPhantom
+-- defacto snapshot from GuidKit
 select case when dbo.uuid_v7_from_v8mssql('dc0c0c07-398f-848c-b30d-017f22e279b0') = '017F22E2-79B0-7CC3-98C4-DC0C0C07398F' then 'pass' else 'fail' end
 select case when dbo.uuid_v8mssql_from_v7('017F22E2-79B0-7CC3-98C4-DC0C0C07398F') = 'dc0c0c07-398f-848c-b30d-017f22e279b0' then 'pass' else 'fail' end
 
