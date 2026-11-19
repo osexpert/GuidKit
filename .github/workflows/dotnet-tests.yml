@@ -1,4 +1,4 @@
-name: .NET 8 Tests (Linux + Windows)
+name: Tests
 
 on:
   push:
@@ -9,24 +9,31 @@ on:
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        target-framework: [net8.0, net9.0, net48]
+        exclude:
+          - os: ubuntu-latest
+            target-framework: net48
 
     runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Setup .NET 8
+    - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: |
+          8.0.x
+          9.0.x
 
     - name: Restore
       run: dotnet restore GuidKit.Tests/GuidKit.Tests.csproj
 
-    - name: Build (net8 only)
-      run: dotnet build GuidKit.Tests/GuidKit.Tests.csproj --framework net8.0 --configuration Release --no-restore
+    - name: Build
+      run: dotnet build GuidKit.Tests/GuidKit.Tests.csproj --framework ${{ matrix.target-framework }} --configuration Release --no-restore
 
-    - name: Test (net8 only)
-      run: dotnet test GuidKit.Tests/GuidKit.Tests.csproj --framework net8.0 --configuration Release --no-build
+    - name: Test
+      run: dotnet test GuidKit.Tests/GuidKit.Tests.csproj --framework ${{ matrix.target-framework }} --configuration Release --no-build
