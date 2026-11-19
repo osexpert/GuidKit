@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -31,16 +30,12 @@ namespace GuidPhantom
 		// net8+ has it
 #else
 		public static byte[] ToByteArray(this Guid g, bool bigEndian)
-        {
-  //          if (_toByteArray.Value != null)
-//                return _toByteArray.Value(g, bigEndian);
-
-            var bytes = g.ToByteArray();
-            if (BitConverter.IsLittleEndian == bigEndian)
-                SwapEndian(bytes);
-
-            return bytes;
-        }
+		{
+			var bytes = g.ToByteArray();
+			if (bigEndian)
+				SwapEndian(bytes.AsSpan());
+			return bytes;
+		}
 #endif
 
 		public static Guid CreateVersion1() => CreateVersion1(out var _);
@@ -156,7 +151,7 @@ namespace GuidPhantom
 
 		/// <summary>
 		/// MS SQL SERVER: NEWSEQUENTIALID
-		/// NEWSEQUENTIALID is Version1 with swapped endianess. This means this Guid is non-standard and the variant/version will be random/invalid.
+		/// NEWSEQUENTIALID is Version1 with swapped endianness. This means this Guid is non-standard and the variant/version will be random/invalid.
 		/// Non-standard.
 		/// </summary>
 		/// <returns>NEWSEQUENTIALID</returns>
@@ -165,16 +160,16 @@ namespace GuidPhantom
 
 		/// <summary>
 		/// MS SQL SERVER: NEWSEQUENTIALID
-		/// NEWSEQUENTIALID is Version1 with swapped endianess. This means this Guid is non-standard and the variant/version will be random/invalid.
+		/// NEWSEQUENTIALID is Version1 with swapped endianness. This means this Guid is non-standard and the variant/version will be random/invalid.
 		/// Non-standard.
 		/// </summary>
 		/// <returns>NEWSEQUENTIALID</returns>
 		public static Guid CreateNEWSEQUENTIALID(out bool safe)
 		{
 			var v1 = CreateVersion1(out safe);
-			var bytes = v1.ToByteArray(bigEndian: true);
-			//SwapEndian(bytes);
-			return FromByteArray(bytes, bigEndian: false);
+			Span<byte> bytes = stackalloc byte[16];
+			ToBigEndianSpan(v1, bytes);
+			return FromByteArray(bytes, bigEndian: false); // swap endianness
 		}
 
 		//public static Guid ConvertNEWSEQUENTIALIDToVersion1(this Guid newseq)
@@ -209,11 +204,21 @@ namespace GuidPhantom
 		/// <returns>Variant and version</returns>
 		public static (GuidVariant Variant, byte? Version) GetVariantAndVersion(this Guid g)
 		{
-			var b = g.ToByteArray(bigEndian: true);
+			Span<byte> b = stackalloc byte[16];
+			ToBigEndianSpan(g, b);
 			return GetVariantAndVersion(b);
 		}
 
-		private static (GuidVariant Variant, byte? Version) GetVariantAndVersion(byte[] b)
+		static void CopyGuidToSpan(Guid g, Span<byte> b)
+		{
+#if NET8_0_OR_GREATER
+			if (!g.TryWriteBytes(b)) throw new InvalidOperationException("Destination span is too small for a Guid.");
+#else
+			g.ToByteArray().AsSpan().CopyTo(b);
+#endif
+		}
+
+		private static (GuidVariant Variant, byte? Version) GetVariantAndVersion(ReadOnlySpan<byte> b)
 		{
 			GuidVariant? variant;
 
@@ -250,7 +255,7 @@ namespace GuidPhantom
 			return (variant.Value, version);
 		}
 
-		private static void SwapEndian(byte[] guid)
+		private static void SwapEndian(Span<byte> guid)
 		{
 			SwapBytes(guid, 0, 3);
 			SwapBytes(guid, 1, 2);
@@ -259,13 +264,10 @@ namespace GuidPhantom
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private static void SwapBytes(byte[] bytes, int a, int b)
+		private static void SwapBytes(Span<byte> bytes, int a, int b)
 		{
 			(bytes[b], bytes[a]) = (bytes[a], bytes[b]);
 		}
-
-
-
 
 #if NET8_0_OR_GREATER
 		// already has it (one that takes ReadOnlySpan<byte>)
@@ -276,26 +278,29 @@ namespace GuidPhantom
 		/// <param name="bytes"></param>
 		/// <param name="bigEndian"></param>
 		/// <returns>Guid</returns>
-		public static Guid FromByteArray(byte[] bytes, bool bigEndian) => new(bytes, bigEndian);
+		public static Guid FromByteArray(ReadOnlySpan<byte> bytes, bool bigEndian) => new(bytes, bigEndian);
 #else
+
 		/// <summary>
-		/// Create Guid from byte array
+		/// Create Guid from byte array.
 		/// </summary>
 		/// <param name="bytes"></param>
 		/// <param name="bigEndian"></param>
 		/// <returns>Guid</returns>
-        public static Guid FromByteArray(byte[] bytes, bool bigEndian)
-        {
-            if (bytes.Length != 16)
-            {
-                throw new ArgumentException("Must be 16 bytes");
-            }
+		public static Guid FromByteArray(ReadOnlySpan<byte> bytes, bool bigEndian)
+		{
+			if (bytes.Length != 16) throw new ArgumentException("Must be 16 bytes");
 
-            if (BitConverter.IsLittleEndian == bigEndian)
-                SwapEndian(bytes);
+			if (bigEndian)
+			{
+				Span<byte> buffer = stackalloc byte[16];
+				bytes.CopyTo(buffer);
+				SwapEndian(buffer);
+				return new Guid(buffer.ToArray());
+			}
 
-            return new Guid(bytes);
-        }
+			return new Guid(bytes.ToArray());
+		}
 #endif
 
 		/// <summary>
@@ -351,7 +356,10 @@ namespace GuidPhantom
 
 		private static Guid CreateVersion7Or8MsSql(DateTimeOffset timestamp, byte version)
 		{
-			var bytes = Guid.NewGuid().ToByteArray(bigEndian: true);
+			Span<byte> bytes = stackalloc byte[16];
+
+			var newGuid = Guid.NewGuid();
+			CopyGuidToSpan(newGuid, bytes);
 
 			long now_ts = timestamp.ToUnixTimeMilliseconds();
 
@@ -435,7 +443,7 @@ namespace GuidPhantom
 		/// <returns>Version8MsSql Guid</returns>
 		public static Guid CreateVersion8MsSql() => CreateVersion7Or8MsSql(DateTimeOffset.UtcNow, 8);
 
-		internal static void CreateVersion7(byte[] bytes, long unix_ts_ms, ref int counter, bool setCounter, byte setBits)
+		internal static void CreateVersion7(Span<byte> bytes, long unix_ts_ms, ref int counter, bool setCounter, byte setBits)
 		{
 			if (unix_ts_ms < 0)
 				throw new ArgumentOutOfRangeException(nameof(unix_ts_ms));
@@ -478,7 +486,7 @@ namespace GuidPhantom
 			}
 		}
 
-		internal static void CreateVersion8MsSql(byte[] bytes, long unix_ts_ms, ref int counter, bool setCounter, byte setBits)
+		internal static void CreateVersion8MsSql(Span<byte> bytes, long unix_ts_ms, ref int counter, bool setCounter, byte setBits)
 		{
 			if (unix_ts_ms < 0)
 				throw new ArgumentOutOfRangeException(nameof(unix_ts_ms));
@@ -559,22 +567,23 @@ namespace GuidPhantom
 			if (!(version == 3 || version == 5 || version == 8))
 				throw new ArgumentOutOfRangeException(nameof(version), "Version must be either 3 or 5 (or 8).");
 
-			var namespaceBytes = namespaceId.ToByteArray(bigEndian: true);
+			Span<byte> namespaceBytes = stackalloc byte[16];
+			ToBigEndianSpan(namespaceId, namespaceBytes);
 
 			byte[] data = new byte[namespaceBytes.Length + nameBytes.Length];
-			namespaceBytes.CopyTo(data, 0);
+
+
+			namespaceBytes.CopyTo(data);
 			nameBytes.CopyTo(data, namespaceBytes.Length);
 
 			// compute the hash of the namespace ID concatenated with the name data
-			//var data = namespaceBytes.Concat(nameBytes).ToArray();
-
 			byte[] hash;
 			using (var algorithm = hashAlgo())
 				hash = algorithm.ComputeHash(data);
 
 			// Copy 16 first bytes from hash straight into the guid (ignoring the rest of the bytes in the hash)
-			var newGuid = new byte[16];
-			Array.Copy(hash, 0, newGuid, 0, 16);
+			Span<byte> newGuid = stackalloc byte[16];
+			hash.AsSpan(0, 16).CopyTo(newGuid);
 
 			// set version
 			newGuid[6] = (byte)((version << 4) | (newGuid[6] & 0b0000_1111));
@@ -596,15 +605,16 @@ namespace GuidPhantom
 		/// <returns>Xor Guid</returns>
 		public static Guid CreateXorGuid(this Guid a, Guid b)
 		{
-			var a_bytes = a.ToByteArray(bigEndian: true);
-			var b_bytes = b.ToByteArray(bigEndian: true);
+			Span<byte> a_bytes = stackalloc byte[16];
+			Span<byte> b_bytes = stackalloc byte[16];
+			ToBigEndianSpan(a, a_bytes);
+			ToBigEndianSpan(b, b_bytes);
 
 			if ((a_bytes[8] & 0b1100_0000) != 0b1000_0000)
 				throw new InvalidOperationException("a is not variant " + GuidVariant.IETF);
 			if ((b_bytes[8] & 0b1100_0000) != 0b1000_0000)
 				throw new InvalidOperationException("b is not variant " + GuidVariant.IETF);
-
-			byte[] bytes = new byte[16];
+			Span<byte> bytes = stackalloc byte[16];
 			for (int i = 0; i <= 15; i++)
 				bytes[i] = (byte)(a_bytes[i] ^ b_bytes[i]);
 
@@ -623,15 +633,17 @@ namespace GuidPhantom
 		/// <returns>Opposite of a_or_b. If a_or_b is a, b is returned. If a_or_b is b, a is returned.</returns>
 		public static Guid ReverseXorGuid(this Guid xorGuid, Guid a_or_b)
 		{
-			var xor_bytes = xorGuid.ToByteArray(bigEndian: true);
-			var a_or_b_bytes = a_or_b.ToByteArray(bigEndian: true);
+			Span<byte> xor_bytes = stackalloc byte[16];
+			Span<byte> a_or_b_bytes = stackalloc byte[16];
+			ToBigEndianSpan(xorGuid, xor_bytes);
+			ToBigEndianSpan(a_or_b, a_or_b_bytes);
 
 			if ((xor_bytes[8] & 0b1100_0000) != 0b0000_0000)
 				throw new InvalidOperationException("xorGuid is not variant " + GuidVariant.Apollo);
 			if ((a_or_b_bytes[8] & 0b1100_0000) != 0b1000_0000)
 				throw new InvalidOperationException("a_or_b is not variant " + GuidVariant.IETF);
 
-			byte[] bytes = new byte[16];
+			Span<byte> bytes = stackalloc byte[16];
 			for (int i = 0; i <= 15; i++)
 				bytes[i] = (byte)(xor_bytes[i] ^ a_or_b_bytes[i]);
 
@@ -650,7 +662,8 @@ namespace GuidPhantom
 		/// <returns></returns>
 		public static Guid ConvertVersion7To8MsSql(this Guid g_v7)
 		{
-			var b = g_v7.ToByteArray(bigEndian: true);
+			Span<byte> b = stackalloc byte[16];
+			ToBigEndianSpan(g_v7, b);
 			ConvertVersion7To8MsSql(b);
 			return FromByteArray(b, bigEndian: true);
 		}
@@ -662,7 +675,8 @@ namespace GuidPhantom
 		/// <returns>A version 7 Guid</returns>
 		public static Guid ConvertVersion8MsSqlTo7(this Guid g_v8mssql)
 		{
-			var b = g_v8mssql.ToByteArray(bigEndian: true);
+			Span<byte> b = stackalloc byte[16];
+			ToBigEndianSpan(g_v8mssql, b);
 			ConvertVersion8MsSqlTo7(b);
 			return FromByteArray(b, bigEndian: true);
 		}
@@ -674,7 +688,8 @@ namespace GuidPhantom
 		/// <returns>A version 6 Guid</returns>
 		public static Guid ConvertVersion1To6(this Guid g_v1)
 		{
-			var b = g_v1.ToByteArray(bigEndian: true);
+			Span<byte> b = stackalloc byte[16];
+			ToBigEndianSpan(g_v1, b);
 			ConvertVersion1To6(b);
 			return FromByteArray(b, bigEndian: true);
 		}
@@ -686,7 +701,8 @@ namespace GuidPhantom
 		/// <returns>A version 1 Guid</returns>
 		public static Guid ConvertVersion6To1(this Guid g_v6)
 		{
-			var b = g_v6.ToByteArray(bigEndian: true);
+			Span<byte> b = stackalloc byte[16];
+			ToBigEndianSpan(g_v6, b);
 			ConvertVersion6To1(b);
 			return FromByteArray(b, bigEndian: true);
 		}
@@ -708,7 +724,7 @@ namespace GuidPhantom
     8 -> 7   8.5-8 -> 7.1-4 | 9.1-4 -> 7.5-8
     9 -> 6   version | 9.5-8 -> 6.5-8 
 */
-		private static void ConvertVersion7To8MsSql(byte[] bytes)
+		private static void ConvertVersion7To8MsSql(Span<byte> bytes)
 		{
 			//10x IETF
 			if ((bytes[8] & 0b1100_0000) != 0b1000_0000)
@@ -738,7 +754,7 @@ namespace GuidPhantom
 			bytes[6] = (byte)(newVer << 4 | bytes_9 & 0b0000_1111);
 		}
 
-		private static void ConvertVersion8MsSqlTo7(byte[] bytes)
+		private static void ConvertVersion8MsSqlTo7(Span<byte> bytes)
 		{
 			//10x IETF
 			if ((bytes[8] & 0b1100_0000) != 0b1000_0000)
@@ -771,11 +787,11 @@ namespace GuidPhantom
 		/// <summary>
 		/// Fake a Guid with digits 0-9 (no hex).
 		/// Range:<br/>
-		/// 0 -> 00000000-0000-0000-0000-00000000000<br/>
-		/// 10 -> 00000000-0000-0000-0000-00000000010<br/>
-		/// 42 -> 00000000-0000-0000-0000-00000000042<br/>
+		/// 0 -> 00000000-0000-0000-0000-000000000000<br/>
+		/// 10 -> 00000000-0000-0000-0000-000000000010<br/>
+		/// 42 -> 00000000-0000-0000-0000-000000000042<br/>
 		/// ...<br/>
-		/// 2147483647 -> 00000000-0000-0000-0000-02147483647 (int.MaxValue)<br/>
+		/// 2147483647 -> 00000000-0000-0000-0000-002147483647 (int.MaxValue)<br/>
 		/// Non-standard.
 		/// </summary>
 		/// <param name="i"></param>
@@ -783,27 +799,24 @@ namespace GuidPhantom
 		public static Guid CreateNumericGuid(int i)
 		{
 			if (i < 0)
-				throw new ArgumentException("Must be positive");
+				throw new ArgumentException("Must be 0 or positive");
 			return new Guid(i.ToString().PadLeft(32, '0'));
 		}
 
 		/// <summary>
-		/// 00000000-0000-0000-0000-00000000000 -> 0<br/>
-		/// 00000000-0000-0000-0000-00000000010 -> 10<br/> 
-		/// 00000000-0000-0000-0000-00000000042 -> 42<br/>
+		/// 00000000-0000-0000-0000-000000000000 -> 0<br/>
+		/// 00000000-0000-0000-0000-000000000010 -> 10<br/> 
+		/// 00000000-0000-0000-0000-000000000042 -> 42<br/>
 		/// ...<br/>
-		/// 00000000-0000-0000-0000-02147483647 (int.MaxValue) -> 2147483647<br/>
+		/// 00000000-0000-0000-0000-002147483647 (int.MaxValue) -> 2147483647<br/>
 		/// 
 		/// Everything else will give error
 		/// </summary>
 		/// <param name="g"></param>
 		/// <returns>The number used when creating the numeric Guid</returns>
-		public static int ReverseNumericGuid(this Guid g)
-		{
-			return int.Parse(g.ToString("N"));
-		}
+		public static int ReverseNumericGuid(this Guid g) => int.Parse(g.ToString("N"));
 
-		private static void ConvertVersion1To6(byte[] bytes)
+		private static void ConvertVersion1To6(Span<byte> bytes)
 		{
 			//10x IETF
 			if ((bytes[8] & 0b1100_0000) != 0b1000_0000)
@@ -836,7 +849,7 @@ namespace GuidPhantom
 			bytes[7] = bytes_3;
 		}
 
-		private static void ConvertVersion6To1(byte[] bytes)
+		private static void ConvertVersion6To1(Span<byte> bytes)
 		{
 			//10x IETF
 			if ((bytes[8] & 0b1100_0000) != 0b1000_0000)
@@ -877,8 +890,13 @@ namespace GuidPhantom
 		/// <returns>Info about the Guid</returns>
 		public static GuidInfo GetGuidInfo(this Guid g, GuidVersion8Type version8type = GuidVersion8Type.Unknown)
 		{
-			var b = g.ToByteArray(bigEndian: true);
+			Span<byte> b = stackalloc byte[16];
+			ToBigEndianSpan(g, b);
+			return GetGuidInfo(b, version8type);
+		}
 
+		private static GuidInfo GetGuidInfo(Span<byte> b, GuidVersion8Type version8type)
+		{
 			var vv = GetVariantAndVersion(b);
 			if (vv.Variant == GuidVariant.IETF)
 			{
@@ -905,8 +923,7 @@ namespace GuidPhantom
 						);
 
 					var mac = new byte[6];
-					Array.Copy(b, 10, mac, 0, 6);
-
+					b.Slice(10, 6).CopyTo(mac);
 					return new GuidInfoVersion1And6(vv.Variant, vv.Version.Value, time, seq, mac);
 				}
 				else if (vv.Version == 7 || vv.Version == 8)
@@ -959,7 +976,8 @@ namespace GuidPhantom
 		/// <returns>Incremented Guid</returns>
 		public static Guid CreateIncrementedGuid(this Guid g_base, int increment)
 		{
-			var bytes = g_base.ToByteArray(bigEndian: true);
+			Span<byte> bytes = stackalloc byte[16];
+			ToBigEndianSpan(g_base, bytes);
 
 			int i = 
 				bytes[12] << (3 * 8) |
@@ -985,8 +1003,10 @@ namespace GuidPhantom
 		/// <returns>The increment used when creating the incremented Guid</returns>
 		public static int ReverseIncrementedGuid(this Guid g_incremented, Guid g_base)
 		{
-			var base_bytes = g_base.ToByteArray(bigEndian: true);
-			var inc_bytes = g_incremented.ToByteArray(bigEndian: true);
+			Span<byte> base_bytes = stackalloc byte[16];
+			Span<byte> inc_bytes = stackalloc byte[16];
+			ToBigEndianSpan(g_base, base_bytes);
+			ToBigEndianSpan(g_incremented, inc_bytes);
 
 			// bytes should be equal until the 4-0 last bytes
 			for (int i = 0; i <= 15; i++)
@@ -1100,5 +1120,22 @@ namespace GuidPhantom
 			}
 			return new string(result);
 		}
+
+		/// <summary>
+		/// Write a Guid into a 16 byte span using the big-endian layout this library uses internally.
+		/// </summary>
+		/// <param name="g"></param>
+		/// <param name="destination"></param>
+		private static void ToBigEndianSpan(Guid g, Span<byte> destination)
+		{
+#if NET8_0_OR_GREATER
+			if (!g.TryWriteBytes(destination, bigEndian: true, out _))
+				throw new InvalidOperationException("Destination span is too small for a Guid.");
+#else
+			g.ToByteArray().AsSpan().CopyTo(destination); // ToByteArray produce same bytes regardless of host / endianess
+			SwapEndian(destination); // unconditional
+#endif
+		}
 	}
 }
+
