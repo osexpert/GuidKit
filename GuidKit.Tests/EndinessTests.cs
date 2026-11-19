@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace GuidPhantom.Tests
@@ -151,6 +152,58 @@ namespace GuidPhantom.Tests
 		{
 			var guid = GuidKit.CreateNumericGuid(42);
 			Assert.AreEqual(42, guid.ReverseNumericGuid());
+		}
+
+
+
+
+
+
+		[TestMethod]
+		public void CopyGuidToSpan_GivesBothLayouts()
+		{
+			Span<byte> bigEndianBytes = stackalloc byte[16];
+			Span<byte> dotNetBytes = stackalloc byte[16];
+
+			GuidKit.CopyGuidToSpan(Known, bigEndianBytes, bigEndian: true);
+			GuidKit.CopyGuidToSpan(Known, dotNetBytes, bigEndian: false);
+
+			CollectionAssert.AreEqual(KnownBigEndian, bigEndianBytes.ToArray());
+			CollectionAssert.AreEqual(KnownDotNetLayout, dotNetBytes.ToArray());
+		}
+
+		// Regresjonstest for seeding av teller i CreateVersion7Or8MsSql.
+		// Guid.NewGuid() er v4, så versjonsnibblen 0100 ligger i øvre nibble av
+		// bytes[7] i .NET-layout. Med bigEndian: false lekker den inn i telleren
+		// og nibblen blir alltid 4. Med bigEndian: true er den tilfeldig.
+		[TestMethod]
+		public void CreateVersion7_CounterSeed_IsRandom()
+		{
+			AssertByte7UpperNibbleVaries(() => GuidKit.CreateVersion7());
+		}
+
+		[TestMethod]
+		public void CreateVersion8MsSql_CounterSeed_IsRandom()
+		{
+			AssertByte7UpperNibbleVaries(() => GuidKit.CreateVersion8MsSql());
+		}
+
+		static void AssertByte7UpperNibbleVaries(Func<Guid> create)
+		{
+			var nibbles = new HashSet<int>();
+
+			for (int i = 0; i < 40; i++)
+			{
+				var guid = create();
+				var bytes = guid.ToByteArray(bigEndian: true);
+				var nibble = bytes[7] >> 4;
+				nibbles.Add(nibble);
+
+				// ny ms-slot gir ny seeding av telleren
+				Thread.Sleep(2);
+			}
+
+			Assert.IsTrue(nibbles.Count > 1, "bytes[7] upper nibble is constant, counter seed is not random");
 		}
 	}
 
