@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -32,7 +33,7 @@ namespace GuidPhantom
 		public static byte[] ToByteArray(this Guid g, bool bigEndian)
 		{
 			var bytes = g.ToByteArray();
-			if (bigEndian)
+			if (BitConverter.IsLittleEndian == bigEndian)
 				SwapEndian(bytes.AsSpan());
 			return bytes;
 		}
@@ -174,7 +175,7 @@ namespace GuidPhantom
 				throw new InvalidOperationException("Destination span is too small for a Guid.");
 #else
 			g.ToByteArray().AsSpan().CopyTo(destination);
-			if (bigEndian)
+			if (BitConverter.IsLittleEndian == bigEndian)
 				SwapEndian(destination);
 #endif
 		}
@@ -253,7 +254,7 @@ namespace GuidPhantom
 			if (bytes.Length != 16)
 				throw new ArgumentException("Must be 16 bytes");
 
-			if (bigEndian)
+			if (BitConverter.IsLittleEndian == bigEndian)
 			{
 				Span<byte> buffer = stackalloc byte[16];
 				bytes.CopyTo(buffer);
@@ -941,18 +942,10 @@ namespace GuidPhantom
 			Span<byte> bytes = stackalloc byte[16];
 			CopyGuidToSpan(g_base, bytes, bigEndian: true);
 
-			int i = 
-				bytes[12] << (3 * 8) |
-				bytes[13] << (2 * 8) |
-				bytes[14] << (1 * 8) |
-				bytes[15];
-
-			i += increment;
-
-			bytes[12] = (byte)(i >> (3 * 8));
-			bytes[13] = (byte)(i >> (2 * 8));
-			bytes[14] = (byte)(i >> (1 * 8));
-			bytes[15] = (byte)i;
+			var tail_bytes = bytes.Slice(12, 4);
+			uint tail = BinaryPrimitives.ReadUInt32BigEndian(tail_bytes);
+			uint new_tail = unchecked(tail + (uint)increment); // wrap ok
+			BinaryPrimitives.WriteUInt32BigEndian(tail_bytes, new_tail);
 
 			return FromByteArray(bytes, bigEndian: true);
 		}
@@ -970,28 +963,15 @@ namespace GuidPhantom
 			CopyGuidToSpan(g_base, base_bytes, bigEndian: true);
 			CopyGuidToSpan(g_incremented, inc_bytes, bigEndian: true);
 
-			// bytes should be equal until the 4-0 last bytes
-			for (int i = 0; i <= 15; i++)
-			{
-				var eq = base_bytes[i] == inc_bytes[i];
-				if (i <= 11 && !eq)
-					throw new ArgumentException("First 12 bytes should be equal");
+			var base_head = base_bytes.Slice(0, 12);
+			var inc_head = inc_bytes.Slice(0, 12);
+			if (!base_head.SequenceEqual(inc_head))
+				throw new ArgumentException("First 12 bytes should be equal");
 
-				if (i >= 12 && !eq)
-				{
-					int base_int = 0;
-					int inc_int = 0;
-					for (int j = i; j <= 15; j++)
-					{
-						base_int |= base_bytes[j] << ((15 - j) * 8);
-						inc_int |= inc_bytes[j] << ((15 - j) * 8);
-					}
-					return inc_int - base_int;
-				}
-			}
+			uint base_tail = BinaryPrimitives.ReadUInt32BigEndian(base_bytes.Slice(12, 4));
+			uint inc_tail = BinaryPrimitives.ReadUInt32BigEndian(inc_bytes.Slice(12, 4));
 
-			// both guid's equal
-			return 0;
+			return unchecked((int)(inc_tail - base_tail));
 		}
 
 		/// <summary>
@@ -1002,6 +982,9 @@ namespace GuidPhantom
 		/// <returns></returns>
 		public static Guid FromHexString(string hex, bool bigEndian = true)
 		{
+			if (hex == null)
+				throw new ArgumentNullException(nameof(hex));
+
 			if (hex.Length == 17 * 2 && hex[0] == '0' && (hex[1] == 'x' || hex[1] == 'X'))
 			{
 #if NET6_0_OR_GREATER
@@ -1032,13 +1015,18 @@ namespace GuidPhantom
 
 		private static int GetHexVal(char hex)
 		{
-			int val = (int)hex;
-			//For uppercase A-F letters:
-			//return val - (val < 58 ? 48 : 55);
-			//For lowercase a-f letters:
-			//return val - (val < 58 ? 48 : 87);
-			//Or the two combined, but a bit slower:
-			return val - (val < 58 ? 48 : (val < 97 ? 55 : 87));
+			bool is_digit = hex >= '0' && hex <= '9';
+			bool is_upper = hex >= 'A' && hex <= 'F';
+			bool is_lower = hex >= 'a' && hex <= 'f';
+
+			if (is_digit)
+				return hex - '0';
+			if (is_upper)
+				return hex - 'A' + 10;
+			if (is_lower)
+				return hex - 'a' + 10;
+
+			throw new FormatException($"Invalid hex character: '{hex}'");
 		}
 
 		/// <summary>

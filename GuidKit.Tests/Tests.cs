@@ -72,6 +72,16 @@ namespace GuidPhantom.Tests
 		}
 
 		[TestMethod]
+		public void Misc()
+		{
+			var base_guid = GuidKit.FromHexString("0x01918D8D60A77B77AF4A98D3FFFFFFFF");
+			Assert.AreEqual(1, base_guid.CreateIncrementedGuid(1).ReverseIncrementedGuid(base_guid));   // wrap to 0x00000000
+			Assert.AreEqual(int.MinValue, base_guid.CreateIncrementedGuid(int.MinValue).ReverseIncrementedGuid(base_guid));
+			Assert.AreEqual(-1, base_guid.CreateIncrementedGuid(-1).ReverseIncrementedGuid(base_guid));
+			Assert.ThrowsException<FormatException>(() => GuidKit.FromHexString("0x" + new string('G', 32)));
+		}
+
+		[TestMethod]
 		public void NEWSEQUENTIALID_Rising()
 		{
 			Guid? prev = null;
