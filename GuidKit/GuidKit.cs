@@ -985,10 +985,10 @@ namespace GuidPhantom
 			if (hex == null)
 				throw new ArgumentNullException(nameof(hex));
 
-			if (hex.Length == 17 * 2 && hex[0] == '0' && (hex[1] == 'x' || hex[1] == 'X'))
+			if (hex.Length == 32 + 2 && hex[0] == '0' && (hex[1] == 'x' || hex[1] == 'X'))
 			{
 #if NET6_0_OR_GREATER
-				var bytes = Convert.FromHexString(hex.Substring(2));
+				var bytes = Convert.FromHexString(hex.AsSpan(2));
 #else
 				var bytes = StringToByteArrayFastest(hex.Substring(2));
 #endif
